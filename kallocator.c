@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include "kallocator.h"
 
-/* ------------- Linked list implementation ------------- */
+/* ------------- Declaring structs ------------- */
 
 struct nodeStruct {
     bool allocated;
@@ -12,6 +12,17 @@ struct nodeStruct {
     size_t location;
     struct nodeStruct *next;
 };
+
+struct KAllocator {
+    enum allocation_algorithm aalgorithm;
+    int size;
+    void* memory;
+    struct nodeStruct* klist_head;
+};
+
+struct KAllocator kallocator;
+
+/* ------------- Linked list implementation ------------- */
 
 //initializes the first node of meta data list
 struct nodeStruct* initialize_list(int size){
@@ -24,10 +35,12 @@ struct nodeStruct* initialize_list(int size){
   return new_node;
 }
 
-size_t* allocate_memory(struct nodeStruct **headRef, int size, allocation_algorithm type){
+size_t* allocate_memory(struct nodeStruct **headRef, int size, enum allocation_algorithm type){
+  struct nodeStruct* node = *headRef;
+
   switch(type){
     case FIRST_FIT:
-      struct nodeStruct* node = *headRef;
+    {
       while(node != NULL){
         //loop to find free space
         while(node->allocated && node != NULL){
@@ -64,9 +77,9 @@ size_t* allocate_memory(struct nodeStruct **headRef, int size, allocation_algori
         }
       }
       return NULL;
-
+    }//first fit case
     case BEST_FIT:
-      struct nodeStruct* node = *headRef;
+    {
       struct nodeStruct* best_fit_node = node;
       int smallest_size_difference = size;
 
@@ -112,9 +125,9 @@ size_t* allocate_memory(struct nodeStruct **headRef, int size, allocation_algori
       else{
         return &best_fit_node->location;
       }
-
+    }//best fit case
     case WORST_FIT:
-      struct nodeStruct* node = *headRef;
+    {
       struct nodeStruct* worst_fit_node = node;
       int largest_size_difference = 0;
 
@@ -160,16 +173,26 @@ size_t* allocate_memory(struct nodeStruct **headRef, int size, allocation_algori
       else{
         return &worst_fit_node->location;
       }
+    }//worst fit case
   } //switch
 }//function
 
 //frees up all the nodes of the linked list
 void delete_list(struct nodeStruct **headRef){
+  struct nodeStruct* node = *headRef;
+  struct nodeStruct* tmp = *headRef;
 
+  while(node != NULL){
+    node = node->next;
+    free(tmp);
+    tmp = node;
+  }
 }
 
 void free_memory(void* ptr, struct nodeStruct **headRef){
   struct nodeStruct* node = *headRef;
+  struct nodeStruct* prev = *headRef;
+
   while(node != NULL){
     //if ptr is pointing to the node location
     if(&kallocator.memory[node->location] == ptr){
@@ -177,31 +200,28 @@ void free_memory(void* ptr, struct nodeStruct **headRef){
       if(node->next->allocated || node->next == NULL){
         node->allocated = false;
       }
+      //if prev node is free node combine nodes to prevent contiguous free memory
+      if(prev->allocated == false || node != prev){
+        int tmp_size = node->size;
+        prev->size = prev->size + tmp_size;
+        prev->next = node->next;
+        free(node);
+        node = prev;
+      }
       //if next node is a free node combine nodes to prevent contiguous free memory
-      else{
+      else if (node->next->allocated == false){
         int tmp_size = node->next->size;
         node->size = node->size + tmp_size;
         node->next = node->next->next;
         free(node->next);
       }
     }
+    prev = node;
     node = node->next;
   }
 }
 
 /* ------------- Memory allocation implementaion ------------- */
-
-struct KAllocator {
-    enum allocation_algorithm aalgorithm;
-    int size;
-    void* memory;
-    // Some other data members you want,
-    // such as lists to record allocated/free memory
-};
-
-struct KAllocator kallocator;
-struct nodeStruct klist_head;
-
 
 void initialize_allocator(int _size, enum allocation_algorithm _aalgorithm) {
     assert(_size > 0);
@@ -209,26 +229,22 @@ void initialize_allocator(int _size, enum allocation_algorithm _aalgorithm) {
     kallocator.size = _size;
     kallocator.memory = malloc((size_t)kallocator.size);
 
-    // Add some other initialization
-    klist_head = initialize_list(size);
+    // initialize linked list
+    kallocator.klist_head = initialize_list(_size);
 }
 
 void destroy_allocator() {
     free(kallocator.memory);
 
-    // free other dynamic allocated memory to avoid memory leak
-    delete_list(klist_head);
+    // free linked list memory to avoid memory leak
+    delete_list(kallocator.klist_head);
 }
 
 void* kalloc(int _size) {
     void* ptr = NULL;
 
-    //check if there is enough space
-    if()
-
-
     // Allocate memory from kallocator.memory
-    size_t location = allocate_memory(klist_head, _size, kallocator.aalgorithm);
+    size_t location = allocate_memory(kallocator.klist_head, _size, kallocator.aalgorithm);
     ptr = &kallocator.memory[location];
 
     // ptr = address of allocated memory
@@ -237,8 +253,7 @@ void* kalloc(int _size) {
 
 void kfree(void* _ptr) {
     assert(_ptr != NULL);
-
-
+    free_memory(_ptr, kallocator.klist_head);
 }
 
 int compact_allocation(void** _before, void** _after) {
@@ -253,7 +268,7 @@ int compact_allocation(void** _before, void** _after) {
 int available_memory() {
     int available_memory_size = 0;
     // Calculate available memory size
-    struct nodeStruct node = klist_head;
+    struct nodeStruct* node = kallocator.klist_head;
     while(node != NULL){
       if (node->allocated == false){
         available_memory_size = available_memory_size + node->size;
@@ -271,7 +286,7 @@ void print_statistics() {
     int largest_free_chunk_size = 0;
 
     // Calculate the statistics
-    struct nodeStruct node = klist_head;
+    struct nodeStruct* node = kallocator.klist_head;
     while(node != NULL){
       //free chunk
       if(node->allocated == false){

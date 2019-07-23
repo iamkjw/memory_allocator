@@ -35,7 +35,7 @@ struct nodeStruct* initialize_list(int size){
   return new_node;
 }
 
-size_t* allocate_memory(struct nodeStruct **headRef, int size, enum allocation_algorithm type){
+int allocate_memory(struct nodeStruct **headRef, int size, enum allocation_algorithm type){
   struct nodeStruct* node = *headRef;
 
   switch(type){
@@ -60,23 +60,23 @@ size_t* allocate_memory(struct nodeStruct **headRef, int size, enum allocation_a
               new_node->location = node->location + size;
               new_node->next = node->next;
               node->next = new_node;
-              return &node->location;
+              return node->location;
             }
             //if the next node is a free chunk combine values to prevent contiguous free chunks of memory
             else{
               node->next->size = node->next->size + remaining_memory;
-              return &node->location;
+              return node->location;
             }
           }
           //case where it is a perfect fit just return
-          return &node->location;
+          return node->location;
         }
         //case where free memory chunk is not big enough for the desired size loop again
         else{
           node = node->next;
         }
       }
-      return NULL;
+      return -1;
     }//first fit case
     case BEST_FIT:
     {
@@ -85,8 +85,11 @@ size_t* allocate_memory(struct nodeStruct **headRef, int size, enum allocation_a
 
       while(node != NULL){
         //loop to find free space
-        while(node->allocated && node != NULL){
+        while(node->allocated){
           node = node->next;
+          if(node == NULL){
+            return -1;
+          }
         }
         //check if free node has enough space for allocation
         if(node->size >= size){
@@ -100,7 +103,7 @@ size_t* allocate_memory(struct nodeStruct **headRef, int size, enum allocation_a
       }
       //return NULL if there are no free spaces after iterating through list
       if(best_fit_node->size < size){
-        return NULL;
+        return -1;
       }
       //after iterating through entire list, allocate memory in the smallest space
       best_fit_node->allocated = true;
@@ -114,16 +117,16 @@ size_t* allocate_memory(struct nodeStruct **headRef, int size, enum allocation_a
           new_node->location = best_fit_node->location + size;
           new_node->next = best_fit_node->next;
           best_fit_node->next = new_node;
-          return &best_fit_node->location;
+          return best_fit_node->location;
         }
         //if the next node is a free chunk combine values to prevent contiguous free chunks of memory
         else{
           best_fit_node->next->size = node->next->size + remaining_memory;
-          return &best_fit_node->location;
+          return best_fit_node->location;
         }
       }
       else{
-        return &best_fit_node->location;
+        return best_fit_node->location;
       }
     }//best fit case
     case WORST_FIT:
@@ -133,8 +136,11 @@ size_t* allocate_memory(struct nodeStruct **headRef, int size, enum allocation_a
 
       while(node != NULL){
         //loop to find free space
-        while(node->allocated && node != NULL){
+        while(node->allocated){
           node = node->next;
+          if(node == NULL){
+            return -1;
+          }
         }
         //check if free node has enough space for allocation
         if(node->size >= size){
@@ -148,7 +154,7 @@ size_t* allocate_memory(struct nodeStruct **headRef, int size, enum allocation_a
       }
       //return NULL if there are no free spaces after iterating through list
       if(worst_fit_node->size < size){
-        return NULL;
+        return -1;
       }
       //after iterating through entire list, allocate memory in the smallest space
       worst_fit_node->allocated = true;
@@ -162,16 +168,16 @@ size_t* allocate_memory(struct nodeStruct **headRef, int size, enum allocation_a
           new_node->location = worst_fit_node->location + size;
           new_node->next = worst_fit_node->next;
           worst_fit_node->next = new_node;
-          return &worst_fit_node->location;
+          return worst_fit_node->location;
         }
         //if the next node is a free chunk combine values to prevent contiguous free chunks of memory
         else{
           worst_fit_node->next->size = node->next->size + remaining_memory;
-          return &worst_fit_node->location;
+          return worst_fit_node->location;
         }
       }
       else{
-        return &worst_fit_node->location;
+        return worst_fit_node->location;
       }
     }//worst fit case
   } //switch
@@ -237,15 +243,18 @@ void destroy_allocator() {
     free(kallocator.memory);
 
     // free linked list memory to avoid memory leak
-    delete_list(kallocator.klist_head);
+    delete_list(&kallocator.klist_head);
 }
 
 void* kalloc(int _size) {
     void* ptr = NULL;
 
     // Allocate memory from kallocator.memory
-    size_t location = allocate_memory(kallocator.klist_head, _size, kallocator.aalgorithm);
-    ptr = &kallocator.memory[location];
+    size_t location = allocate_memory(&kallocator.klist_head, _size, kallocator.aalgorithm);
+    //checking for successsful allocation
+    if (location != -1){
+      ptr = &kallocator.memory[location];
+    }
 
     // ptr = address of allocated memory
     return ptr;
@@ -253,7 +262,7 @@ void* kalloc(int _size) {
 
 void kfree(void* _ptr) {
     assert(_ptr != NULL);
-    free_memory(_ptr, kallocator.klist_head);
+    free_memory(_ptr, &kallocator.klist_head);
 }
 
 int compact_allocation(void** _before, void** _after) {
@@ -287,6 +296,7 @@ void print_statistics() {
 
     // Calculate the statistics
     struct nodeStruct* node = kallocator.klist_head;
+
     while(node != NULL){
       //free chunk
       if(node->allocated == false){
@@ -299,10 +309,12 @@ void print_statistics() {
           largest_free_chunk_size = node->size;
         }
       }
+      //allocated chunks
       else{
         allocated_size = allocated_size + node->size;
         allocated_chunks++;
       }
+      node = node->next;
     }
     //case when there are no free chunks
     if(free_chunks == 0){

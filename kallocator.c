@@ -9,7 +9,7 @@
 struct nodeStruct {
     bool allocated;
     int size;
-    size_t location;
+    int location;
     struct nodeStruct *next;
 };
 
@@ -53,7 +53,7 @@ int allocate_memory(struct nodeStruct **headRef, int size, enum allocation_algor
           //if remaining memory is greater than 0 create a new node
           if(remaining_memory > 0){
             //if the next node is a not a free chunk create a node
-            if(node->next->allocated){
+            if(node->next->allocated || node->next == NULL){
               struct nodeStruct *new_node = malloc(sizeof(struct nodeStruct));
               new_node->size = remaining_memory;
               new_node->allocated = false;
@@ -81,15 +81,12 @@ int allocate_memory(struct nodeStruct **headRef, int size, enum allocation_algor
     case BEST_FIT:
     {
       struct nodeStruct* best_fit_node = node;
-      int smallest_size_difference = size;
+      int smallest_size_difference = kallocator.size;
 
       while(node != NULL){
         //loop to find free space
-        while(node->allocated){
+        while(node->allocated && node != NULL){
           node = node->next;
-          if(node == NULL){
-            return -1;
-          }
         }
         //check if free node has enough space for allocation
         if(node->size >= size){
@@ -110,18 +107,21 @@ int allocate_memory(struct nodeStruct **headRef, int size, enum allocation_algor
       int remaining_memory = best_fit_node->size - size;
       if(remaining_memory > 0){
         //if the next node is a not a free chunk create a node
-        if(best_fit_node->next->allocated){
+        if(best_fit_node->next->allocated || best_fit_node->next == NULL){
           struct nodeStruct *new_node = malloc(sizeof(struct nodeStruct));
           new_node->size = remaining_memory;
           new_node->allocated = false;
           new_node->location = best_fit_node->location + size;
           new_node->next = best_fit_node->next;
           best_fit_node->next = new_node;
+          best_fit_node->size = size;
           return best_fit_node->location;
         }
         //if the next node is a free chunk combine values to prevent contiguous free chunks of memory
         else{
-          best_fit_node->next->size = node->next->size + remaining_memory;
+          best_fit_node->next->size = best_fit_node->next->size + remaining_memory;
+          best_fit_node->next->location = best_fit_node->next->location - remaining_memory;
+          best_fit_node->size = size;
           return best_fit_node->location;
         }
       }
@@ -136,11 +136,8 @@ int allocate_memory(struct nodeStruct **headRef, int size, enum allocation_algor
 
       while(node != NULL){
         //loop to find free space
-        while(node->allocated){
+        while(node->allocated && node != NULL){
           node = node->next;
-          if(node == NULL){
-            return -1;
-          }
         }
         //check if free node has enough space for allocation
         if(node->size >= size){
@@ -161,18 +158,21 @@ int allocate_memory(struct nodeStruct **headRef, int size, enum allocation_algor
       int remaining_memory = worst_fit_node->size - size;
       if(remaining_memory > 0){
         //if the next node is a not a free chunk create a node
-        if(worst_fit_node->next->allocated){
+        if(worst_fit_node->next->allocated || worst_fit_node->next == NULL){
           struct nodeStruct *new_node = malloc(sizeof(struct nodeStruct));
           new_node->size = remaining_memory;
           new_node->allocated = false;
           new_node->location = worst_fit_node->location + size;
           new_node->next = worst_fit_node->next;
           worst_fit_node->next = new_node;
+          worst_fit_node->size = size;
           return worst_fit_node->location;
         }
         //if the next node is a free chunk combine values to prevent contiguous free chunks of memory
         else{
-          worst_fit_node->next->size = node->next->size + remaining_memory;
+          worst_fit_node->next->size = worst_fit_node->next->size + remaining_memory;
+          worst_fit_node->next->location = worst_fit_node->next->location - remaining_memory;
+          worst_fit_node->size = size;
           return worst_fit_node->location;
         }
       }
@@ -250,10 +250,10 @@ void* kalloc(int _size) {
     void* ptr = NULL;
 
     // Allocate memory from kallocator.memory
-    size_t location = allocate_memory(&kallocator.klist_head, _size, kallocator.aalgorithm);
+    int location = allocate_memory(&kallocator.klist_head, _size, kallocator.aalgorithm);
     //checking for successsful allocation
     if (location != -1){
-      ptr = &kallocator.memory[location];
+      ptr = kallocator.memory + location;
     }
 
     // ptr = address of allocated memory

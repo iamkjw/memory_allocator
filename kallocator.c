@@ -31,6 +31,7 @@ struct nodeStruct* initialize_list(int size){
     new_node->size = size;
     new_node->allocated = false;
     new_node->location = 0;
+    new_node->next = NULL;
   }
   return new_node;
 }
@@ -53,18 +54,33 @@ int allocate_memory(struct nodeStruct **headRef, int size, enum allocation_algor
           //if remaining memory is greater than 0 create a new node
           if(remaining_memory > 0){
             //if the next node is a not a free chunk create a node
-            if(node->next->allocated || node->next == NULL){
+            if(node->next != NULL){
+              if(node->next->allocated){
+                struct nodeStruct *new_node = malloc(sizeof(struct nodeStruct));
+                new_node->size = remaining_memory;
+                new_node->allocated = false;
+                new_node->location = node->location + size;
+                new_node->next = node->next;
+                node->next = new_node;
+                node->size = size;
+                return node->location;
+              }
+              //if the next node is a free chunk combine values to prevent contiguous free chunks of memory
+              else{
+                node->next->size = node->next->size + remaining_memory;
+                node->size = size;
+                return node->location;
+              }
+            }
+            //case when next node is NULL
+            else{
               struct nodeStruct *new_node = malloc(sizeof(struct nodeStruct));
               new_node->size = remaining_memory;
               new_node->allocated = false;
               new_node->location = node->location + size;
-              new_node->next = node->next;
+              new_node->next = NULL;
               node->next = new_node;
-              return node->location;
-            }
-            //if the next node is a free chunk combine values to prevent contiguous free chunks of memory
-            else{
-              node->next->size = node->next->size + remaining_memory;
+              node->size = size;
               return node->location;
             }
           }
@@ -107,20 +123,33 @@ int allocate_memory(struct nodeStruct **headRef, int size, enum allocation_algor
       int remaining_memory = best_fit_node->size - size;
       if(remaining_memory > 0){
         //if the next node is a not a free chunk create a node
-        if(best_fit_node->next->allocated || best_fit_node->next == NULL){
+        if(best_fit_node->next != NULL){
+          if(best_fit_node->next->allocated){
+            struct nodeStruct *new_node = malloc(sizeof(struct nodeStruct));
+            new_node->size = remaining_memory;
+            new_node->allocated = false;
+            new_node->location = best_fit_node->location + size;
+            new_node->next = best_fit_node->next;
+            best_fit_node->next = new_node;
+            best_fit_node->size = size;
+            return best_fit_node->location;
+          }
+          //if the next node is a free chunk combine values to prevent contiguous free chunks of memory
+          else{
+            best_fit_node->next->size = best_fit_node->next->size + remaining_memory;
+            best_fit_node->next->location = best_fit_node->next->location - remaining_memory;
+            best_fit_node->size = size;
+            return best_fit_node->location;
+          }
+        }
+        //case when next node is NULL
+        else{
           struct nodeStruct *new_node = malloc(sizeof(struct nodeStruct));
           new_node->size = remaining_memory;
           new_node->allocated = false;
           new_node->location = best_fit_node->location + size;
-          new_node->next = best_fit_node->next;
+          new_node->next = NULL;
           best_fit_node->next = new_node;
-          best_fit_node->size = size;
-          return best_fit_node->location;
-        }
-        //if the next node is a free chunk combine values to prevent contiguous free chunks of memory
-        else{
-          best_fit_node->next->size = best_fit_node->next->size + remaining_memory;
-          best_fit_node->next->location = best_fit_node->next->location - remaining_memory;
           best_fit_node->size = size;
           return best_fit_node->location;
         }
@@ -158,20 +187,33 @@ int allocate_memory(struct nodeStruct **headRef, int size, enum allocation_algor
       int remaining_memory = worst_fit_node->size - size;
       if(remaining_memory > 0){
         //if the next node is a not a free chunk create a node
-        if(worst_fit_node->next->allocated || worst_fit_node->next == NULL){
+        if(worst_fit_node->next != NULL){
+          if(worst_fit_node->next->allocated){
+            struct nodeStruct *new_node = malloc(sizeof(struct nodeStruct));
+            new_node->size = remaining_memory;
+            new_node->allocated = false;
+            new_node->location = worst_fit_node->location + size;
+            new_node->next = worst_fit_node->next;
+            worst_fit_node->next = new_node;
+            worst_fit_node->size = size;
+            return worst_fit_node->location;
+          }
+          //if the next node is a free chunk combine values to prevent contiguous free chunks of memory
+          else{
+            worst_fit_node->next->size = worst_fit_node->next->size + remaining_memory;
+            worst_fit_node->next->location = worst_fit_node->next->location - remaining_memory;
+            worst_fit_node->size = size;
+            return worst_fit_node->location;
+          }
+        }
+        //case when next node is NULL
+        else{
           struct nodeStruct *new_node = malloc(sizeof(struct nodeStruct));
           new_node->size = remaining_memory;
           new_node->allocated = false;
           new_node->location = worst_fit_node->location + size;
-          new_node->next = worst_fit_node->next;
+          new_node->next = NULL;
           worst_fit_node->next = new_node;
-          worst_fit_node->size = size;
-          return worst_fit_node->location;
-        }
-        //if the next node is a free chunk combine values to prevent contiguous free chunks of memory
-        else{
-          worst_fit_node->next->size = worst_fit_node->next->size + remaining_memory;
-          worst_fit_node->next->location = worst_fit_node->next->location - remaining_memory;
           worst_fit_node->size = size;
           return worst_fit_node->location;
         }
@@ -202,28 +244,44 @@ void free_memory(void* ptr, struct nodeStruct **headRef){
   while(node != NULL){
     //if ptr is pointing to the node location
     if(&kallocator.memory[node->location] == ptr){
-      //if next node is allocated or null just free current node
-      if(node->next->allocated || node->next == NULL){
-        node->allocated = false;
+      if(node->next != NULL){
+        //if next node is allocated just free current node
+        if(node->next->allocated){
+          node->allocated = false;
+        }
+        //if next node is a free node combine nodes to prevent contiguous free memory
+        else if (!node->next->allocated){
+          int tmp_size = node->next->size;
+          node->size = node->size + tmp_size;
+          node->next = node->next->next;
+          free(node->next);
+          node->allocated = false;
+        }
+        //if prev node is free node combine nodes to prevent contiguous free memory
+        if(prev->allocated == false && node != prev){
+          int tmp_size = node->size;
+          prev->size = prev->size + tmp_size;
+          prev->next = node->next;
+          free(node);
+          node = prev;
+        }
+        return;
       }
+      //case where next node is null
+      node->allocated = false;
       //if prev node is free node combine nodes to prevent contiguous free memory
-      if(prev->allocated == false || node != prev){
+      if(prev->allocated == false && node != prev){
         int tmp_size = node->size;
         prev->size = prev->size + tmp_size;
-        prev->next = node->next;
+        prev->next = NULL;
         free(node);
         node = prev;
       }
-      //if next node is a free node combine nodes to prevent contiguous free memory
-      else if (node->next->allocated == false){
-        int tmp_size = node->next->size;
-        node->size = node->size + tmp_size;
-        node->next = node->next->next;
-        free(node->next);
-      }
+      return;
     }
     prev = node;
     node = node->next;
+
   }
 }
 
@@ -266,13 +324,48 @@ void kfree(void* _ptr) {
 }
 
 int compact_allocation(void** _before, void** _after) {
-    int compacted_size = 0;
 
-    // compact allocated memory
-    // update _before, _after and compacted_size
+    int compacted_size = 0;
+    int total_freed_memory = 0;
+
+    struct nodeStruct* node = kallocator.klist_head;
+    struct nodeStruct* prev = node;
+
+    while(node != NULL){
+      //if node is allocated add it to before/after arrays
+      if(node->allocated){
+        _before[compacted_size] = kallocator.memory + node->location;\
+        //move allocated node by amount of spaces freed so far
+        node->location -= total_freed_memory;
+        _after[compacted_size] = kallocator.memory + node->location;
+        compacted_size++;
+      }
+      //case where first node is a free node
+      if(node == prev || !node->allocated){
+        total_freed_memory += node->size;
+        //case where head pointer is empty, if so update new head pointer
+        if(node->next != NULL){
+          kallocator.klist_head = node->next;
+        }
+        prev->next = node->next;
+        free(node);
+        node = prev;
+      }
+      //if node is a free node, add the size to total free size at end of linked list
+      else{
+        total_freed_memory += node->size;
+        prev->next = node->next;
+        free(node);
+        node = prev;
+      }
+      prev = node;
+      node = node->next;
+    }
+    
 
     return compacted_size;
 }
+
 
 int available_memory() {
     int available_memory_size = 0;
@@ -280,8 +373,9 @@ int available_memory() {
     struct nodeStruct* node = kallocator.klist_head;
     while(node != NULL){
       if (node->allocated == false){
-        available_memory_size = available_memory_size + node->size;
+        available_memory_size += node->size;
       }
+      node = node->next;
     }
     return available_memory_size;
 }
@@ -299,7 +393,7 @@ void print_statistics() {
 
     while(node != NULL){
       //free chunk
-      if(node->allocated == false){
+      if(!node->allocated){
         free_size = free_size + node->size;
         free_chunks++;
         if(smallest_free_chunk_size > node->size){
@@ -311,7 +405,7 @@ void print_statistics() {
       }
       //allocated chunks
       else{
-        allocated_size = allocated_size + node->size;
+        allocated_size += node->size;
         allocated_chunks++;
       }
       node = node->next;

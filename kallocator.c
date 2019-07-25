@@ -253,8 +253,9 @@ void free_memory(void* ptr, struct nodeStruct **headRef){
         else if (!node->next->allocated){
           int tmp_size = node->next->size;
           node->size = node->size + tmp_size;
+          struct nodeStruct* tmp_node = node->next;
           node->next = node->next->next;
-          free(node->next);
+          free(tmp_node);
           node->allocated = false;
         }
         //if prev node is free node combine nodes to prevent contiguous free memory
@@ -281,7 +282,6 @@ void free_memory(void* ptr, struct nodeStruct **headRef){
     }
     prev = node;
     node = node->next;
-
   }
 }
 
@@ -329,39 +329,49 @@ int compact_allocation(void** _before, void** _after) {
     int total_freed_memory = 0;
 
     struct nodeStruct* node = kallocator.klist_head;
+    struct nodeStruct* tmp = node;
     struct nodeStruct* prev = node;
 
     while(node != NULL){
       //if node is allocated add it to before/after arrays
       if(node->allocated){
-        _before[compacted_size] = kallocator.memory + node->location;\
+        _before[compacted_size] = kallocator.memory + node->location;
         //move allocated node by amount of spaces freed so far
         node->location -= total_freed_memory;
         _after[compacted_size] = kallocator.memory + node->location;
         compacted_size++;
+        prev = node;
+        node = node->next;
+        continue;
       }
       //case where first node is a free node
-      if(node == prev || !node->allocated){
+      if(node == prev && !node->allocated){
         total_freed_memory += node->size;
         //case where head pointer is empty, if so update new head pointer
         if(node->next != NULL){
           kallocator.klist_head = node->next;
         }
+        tmp = node->next;
         prev->next = node->next;
         free(node);
-        node = prev;
+        node = tmp;
+        continue;
       }
       //if node is a free node, add the size to total free size at end of linked list
       else{
         total_freed_memory += node->size;
+        tmp = node->next;
         prev->next = node->next;
         free(node);
-        node = prev;
+        node = tmp;
       }
-      prev = node;
-      node = node->next;
     }
-    
+    struct nodeStruct *new_node = malloc(sizeof(struct nodeStruct));
+    new_node->size = total_freed_memory;
+    new_node->location = prev->location + prev->size;
+    new_node->allocated = false;
+    new_node->next = NULL;
+    prev->next = new_node;
 
     return compacted_size;
 }
